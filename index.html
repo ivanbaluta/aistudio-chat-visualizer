@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="An interactive visualizer to view and organize tree-like chats from Google AI Studio.">
+    <title>AI Studio Chat Visualizer</title>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="stylesheet" href="style.css">
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+</head>
+
+<body>
+
+    <button id="manage-tags-btn">Manage Tags</button>
+
+    <div id="tag-manager-modal" class="hidden">
+        <div class="modal-content">
+            <button class="close-modal-btn" aria-label="Close window">&times;</button>
+            <h3>All Tags</h3>
+            <div id="all-tags-list"></div>
+            <input type="text" id="new-global-tag-input" placeholder="New tag and press Enter">
+        </div>
+    </div>
+
+    <div id="description-panel" class="hidden">
+        <button id="close-panel-btn" aria-label="Close panel">&times;</button>
+        <div class="description-panel__main">
+            <div class="desc-header">
+                <span id="favorite-star" class="star-icon" role="button" aria-label="Add to favorites">☆</span>
+                <h3 id="desc-title"></h3>
+            </div>
+
+            <div id="desc-meta">
+                <span id="desc-created-date"></span>
+                <span id="desc-modified-date"></span>
+            </div>
+
+            <div>
+                <p id="desc-content"></p>
+            </div>
+
+            <div id="desc-tags-section">
+                <strong>Tags:</strong>
+                <div id="desc-tags-list"></div>
+                <label for="add-tag-select" class="visually-hidden">Add tag to chat</label>
+                <select id="add-tag-select">
+                    <option value="">-- Select a tag to add --</option>
+                </select>
+            </div>
+
+            <a id="source-file-link" href="#" target="_blank" rel="noopener noreferrer">
+                ↗️ Open source file in Google Drive
+            </a>
+        </div>
+    </div>
+
+    <aside id="filter-panel">
+        <h4>Filters</h4>
+        <div>
+            <label for="filter-search" class="visually-hidden">Search by name</label>
+            <input type="text" id="filter-search" placeholder="Search by name...">
+        </div>
+        <div>
+            <label for="filter-by-tag" class="visually-hidden">Filter by tag</label>
+            <select id="filter-by-tag">
+                <option value="">All Tags</option>
+            </select>
+        </div>
+        <div class="filter-panel__checkbox-group">
+            <div class="filter-panel__checkbox">
+                <input type="checkbox" id="filter-favorites">
+                <label for="filter-favorites">Favorites only</label>
+            </div>
+            <div class="filter-panel__checkbox">
+                <input type="checkbox" id="filter-has-branches">
+                <label for="filter-has-branches">With branches only</label>
+            </div>
+        </div>
+        <div class="filter-panel__dates">
+            <label for="filter-date-start">Show chats modified after:</label>
+            <input type="date" id="filter-date-start">
+        </div>
+        <div class="filter-panel__dates">
+            <label for="filter-date-end">And before:</label>
+            <input type="date" id="filter-date-end">
+        </div>
+        <div id="chat-counter"></div>
+    </aside>
+
+    <div id="loading">Loading data...</div>
+    <!-- Vis.js graph container -->
+    <div id="mynetwork"></div>
+
+    <script src="script.js" defer></script>
+
+</body>
+
+</html>

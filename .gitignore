@@ -1,0 +1,25 @@
+# Credentials & Tokens
+credentials.json
+token.json
+
+# User-generated data
+chat_data.json
+favorites.json
+tags.json
+all_tags.json
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
