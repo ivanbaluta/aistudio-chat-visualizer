@@ -1,5 +1,7 @@
 import json
 import os
+import traceback
+import read_chats
 from flask import Flask, request, jsonify, send_from_directory
 
 # --- Configuration ---
@@ -88,6 +90,22 @@ def handle_all_tags():
             return jsonify({"status": "success"})
         return jsonify({"status": "error", "message": "Failed to save all tags"}), 500
 
+@app.route('/api/refresh-data', methods=['POST'])
+def handle_refresh():
+    """Runs the read_chats.py script to refresh data from Google Drive."""
+    print("--- Received request to refresh data from Google Drive. ---")
+    try:
+        read_chats.main()
+        print("--- Data refresh completed successfully. ---")
+        return jsonify({"status": "success", "message": "Data updated successfully"}), 200
+    except Exception as e:
+        error_details = traceback.format_exc()
+        print(f"--- ERROR during data refresh: {e} ---")
+        print(error_details)
+        return jsonify({
+            "status": "error",
+            "message": "An error occurred while fetching data from Google Drive."
+        }), 500
 
 if __name__ == '__main__':
     print("Server is running! Open http://127.0.0.1:5000 in your browser.")
