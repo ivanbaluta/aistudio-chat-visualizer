@@ -1,0 +1,10 @@
+services:
+  web:
+    build: .
+    image: aistudio-visualizer
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+    container_name: visualizer-app
+    restart: unless-stopped

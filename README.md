@@ -40,10 +40,20 @@ Your data privacy is the highest priority. This application is designed with a "
 
 ## 🛠️ Setup & Installation
 
-### Step 1: Configure the Google Drive API
+There are two ways to run this application: using Docker (recommended) or manually with Python.
 
-Before the first run, you need to obtain credentials to access your Google Drive.
+### Step 1: Common Prerequisites (for both methods)
 
+Regardless of which method you choose, you need to complete these two steps first:
+
+**1. Clone the repository:**
+
+```bash
+git clone https://github.com/ivanbaluta/aistudio-chat-visualizer.git
+cd aistudio-chat-visualizer
+```
+
+**2. Configure the Google Drive API:**
 1.  **Go to the [Google Cloud Console](https://console.cloud.google.com/)**.
 2.  **Create a new project** (e.g., "Chat-Visualizer").
 3.  **Enable the "Google Drive API"** for this project (use the search bar at the top).
@@ -59,48 +69,56 @@ Before the first run, you need to obtain credentials to access your Google Drive
 
 > **Note:** On the authentication screen, Google will show a "Google hasn't verified this app" warning. This is expected. You need to click **"Advanced"** and then **"Go to [Your App Name] (unsafe)"** to proceed. The application only requests read-only access to your Google Drive files.
 
-### Step 2: Clone the repository
+---
 
+### Method 1: Running with Docker (Recommended)
+
+This is the easiest way to run the application without manually installing Python or dependencies.
+
+1.  **Run the application** with a single command from the project's root folder:
+    ```bash
+    docker-compose up --build -d
+    ```
+2.  **Fetch your chat data** (run this on first launch and to update):
+    ```bash
+    python read_chats.py
+    ```
+    *The very first time you run this, a browser window will open for authentication.*
+3.  **Open the application** in your browser at [http://127.0.0.1:5000](http://127.0.0.1:5000).
+
+**To stop the application:**
 ```bash
-git clone https://github.com/ivanbaluta/aistudio-chat-visualizer.git
-cd aistudio-chat-visualizer
+docker-compose down
 ```
 
-### Step 3: Install dependencies
+---
 
-It is recommended to use a virtual environment.
+### Method 2: Manual Installation (with Python)
 
-```bash
-python3 -m venv venv
-# For macOS/Linux
-source venv/bin/activate
-# For Windows
-venv\Scripts\activate
-```
+Use this method if you prefer not to use Docker.
 
-Install the required Python libraries from `requirements.txt`:
+1.  **Create and activate a virtual environment:**
 
-```bash
-pip install -r requirements.txt
-```
-
-### Step 4: Run the application
-
-**1. Fetch your chat data from Google Drive (run this on first launch and to update):**
-
-```bash
-python read_chats.py
-```
-
-*The very first time you run this, it will open a browser and ask you to log in and grant permission. A `token.json` file will be created, so you won't need to re-authenticate every time.*
-
-**2. Start the web server:**
-
-```bash
-python server.py
-```
-
-Then, open your browser and navigate to [http://127.0.0.1:5000](http://127.0.0.1:5000).
+    ```bash
+    python3 -m venv venv
+    # For macOS/Linux
+    source venv/bin/activate
+    # For Windows
+    venv\Scripts\activate
+    ```
+2.  **Install dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+3.  **Fetch your chat data** (run this on first launch and to update):
+    ```bash
+    python read_chats.py
+    ```
+4.  **Start the web server:**
+    ```bash
+    python server.py
+    ```
+5.  **Open the application** in your browser at [http://127.0.0.1:5000](http://127.0.0.1:5000).
 
 ## 📖 How to Use
 

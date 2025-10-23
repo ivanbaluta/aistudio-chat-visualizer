@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.git
+.gitignore
+credentials.json
+token.json
+chat_data.json
+favorites.json
+tags.json
+all_tags.json
