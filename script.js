@@ -52,7 +52,10 @@
         manageTagsBtn: document.getElementById('manage-tags-btn'),
         closeModalBtn: document.querySelector('#tag-manager-modal .close-modal-btn'),
         allTagsList: document.getElementById('all-tags-list'),
-        newGlobalTagInput: document.getElementById('new-global-tag-input')
+        newGlobalTagInput: document.getElementById('new-global-tag-input'),
+        refreshDataBtn: document.getElementById('refresh-data-btn'),
+        refreshSpinner: document.getElementById('refresh-spinner'),
+        notificationBar: document.getElementById('notification-bar')
     };
     const DEBOUNCE_DELAY = 300; // Delay in ms for debouncing user input.
 
@@ -60,19 +63,79 @@
 
     /**
      * @async
-     * @description Main entry point. Loads data, initializes the UI and graph, and sets up event listeners.
+     * @description Loads all data and completely redraws the graph.
+    */
+    async function loadAndRender() {
+        state.isFirstDraw = true;
+        DOM.loadingLabel.style.display = 'block';
+        DOM.networkContainer.style.display = 'none';
+
+        await loadInitialData();
+        populateUI();
+        if (!state.network) {
+            createNetworkGraph();
+            setupEventListeners();
+        }
+        onFilterChange();
+
+        DOM.loadingLabel.style.display = 'none';
+        DOM.networkContainer.style.display = 'block';
+    }
+
+    /**
+     * @async
+     * @description Main entry point. Called once when the page loads.
     */
     async function initialize() {
         try {
-            await loadInitialData();
-            populateUI();
-            createNetworkGraph();
-            setupEventListeners();
-            onFilterChange();
-            DOM.loadingLabel.style.display = 'none';
+            await loadAndRender();
         } catch (error) {
             DOM.loadingLabel.innerText = "Error! Failed to load or process data.";
             console.error("Initialization Error:", error);
+        }
+    }
+
+    /**
+     * @description Displays a notification for a few seconds.
+     * @param {string} message
+     * @param {'success' | 'error'} type
+    */
+    function showNotification(message, type) {
+        DOM.notificationBar.textContent = message;
+        DOM.notificationBar.className = type; // 'success' or 'error'
+        
+        setTimeout(() => {
+            DOM.notificationBar.className = 'hidden';
+        }, 5000);
+    }
+
+    /**
+     * @async
+     * @description Handler for the data refresh button.
+    */
+    async function handleRefreshClick() {
+        DOM.refreshDataBtn.disabled = true;
+        DOM.refreshSpinner.classList.remove('hidden');
+        showNotification('Fetching latest data from Google Drive... This may take a moment.', 'success');
+
+        try {
+            const response = await fetch('/api/refresh-data', { method: 'POST' });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to refresh data.');
+            }
+
+            showNotification('Data updated! Reloading graph...', 'success');
+            
+            await loadAndRender();
+
+        } catch (error) {
+            console.error('Refresh failed:', error);
+            showNotification(error.message, 'error');
+        } finally {
+            DOM.refreshDataBtn.disabled = false;
+            DOM.refreshSpinner.classList.add('hidden');
         }
     }
 
@@ -305,6 +368,7 @@
         DOM.favoriteStar.addEventListener('click', handleFavoriteToggle);
         DOM.addTagSelect.addEventListener('change', handleAddTagToChat);
         state.network.on("click", handleGraphClick);
+        DOM.refreshDataBtn.addEventListener('click', handleRefreshClick);
     }
 
     /**
