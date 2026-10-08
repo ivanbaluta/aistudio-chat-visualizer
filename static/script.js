@@ -20,6 +20,7 @@
         debounceTimer: null,
         currentOpenChatId: null
     };
+    window.__visualizerState = state;
 
     // --- Constants & Configuration ---
     const API = {
@@ -57,9 +58,11 @@
         newGlobalTagInput: document.getElementById('new-global-tag-input'),
         refreshDataBtn: document.getElementById('refresh-data-btn'),
         refreshSpinner: document.getElementById('refresh-spinner'),
+        clearFiltersBtn: document.getElementById('clear-filters-btn'),
         notificationBar: document.getElementById('notification-bar')
     };
     const DEBOUNCE_DELAY = 300; // Delay in ms for debouncing user input.
+    const STORAGE_KEY = 'aistudio_visualizer_filters';
 
     // --- Core Logic ---
 
@@ -74,6 +77,7 @@
 
         await loadInitialData();
         populateUI();
+        loadFiltersFromLocalStorage();
 
         if (state.fullChatData.length === 0) {
             DOM.loadingLabel.innerText = "No chat data found. Click '🔄 Refresh Data from Drive' to sync your chats.";
@@ -336,17 +340,8 @@
     */
     function renderGraph(dataToRender) {
         const activeNodeIds = new Set(dataToRender.map(c => c.fileId));
-        const currentNodeIds = new Set(state.nodesDataSet.getIds());
-
-        const nodesToAdd = [];
-        const nodesToUpdate = [];
-        const nodeIdsToRemove = [];
-
-        currentNodeIds.forEach(id => {
-            if (!activeNodeIds.has(id)) {
-                nodeIdsToRemove.push(id);
-            }
-        });
+        const newNodes = [];
+        const newEdges = [];
 
         dataToRender.forEach(chat => {
             const nodeObject = {
@@ -355,21 +350,12 @@
                 color: state.favoriteIds.has(chat.fileId) ? '#FFD700' : '#97C2FC'
             };
             if (chat.description) nodeObject.title = chat.description;
+            newNodes.push(nodeObject);
 
-            if (currentNodeIds.has(chat.fileId)) {
-                nodesToUpdate.push(nodeObject);
-            } else {
-                nodesToAdd.push(nodeObject);
-            }
-        });
-
-        const currentEdgeIds = new Set(state.edgesDataSet.getIds());
-        const targetEdges = [];
-        dataToRender.forEach(chat => {
             if (chat.parent) {
                 const parentId = chat.parent.id.replace('prompts/', '');
                 if (activeNodeIds.has(parentId)) {
-                    targetEdges.push({
+                    newEdges.push({
                         id: `${parentId}->${chat.fileId}`,
                         from: parentId,
                         to: chat.fileId,
@@ -378,20 +364,11 @@
                 }
             }
         });
-        const targetEdgeIds = new Set(targetEdges.map(e => e.id));
-        const edgeIdsToRemove = [];
-        currentEdgeIds.forEach(id => {
-            if (!targetEdgeIds.has(id)) {
-                edgeIdsToRemove.push(id);
-            }
-        });
-        const edgesToAdd = targetEdges.filter(e => !currentEdgeIds.has(e.id));
 
-        if (nodeIdsToRemove.length > 0) state.nodesDataSet.remove(nodeIdsToRemove);
-        if (edgeIdsToRemove.length > 0) state.edgesDataSet.remove(edgeIdsToRemove);
-        if (nodesToUpdate.length > 0) state.nodesDataSet.update(nodesToUpdate);
-        if (nodesToAdd.length > 0) state.nodesDataSet.add(nodesToAdd);
-        if (edgesToAdd.length > 0) state.edgesDataSet.add(edgesToAdd);
+        state.nodesDataSet.clear();
+        state.edgesDataSet.clear();
+        state.nodesDataSet.add(newNodes);
+        state.edgesDataSet.add(newEdges);
     }
 
     /**
@@ -433,10 +410,67 @@
     // --- Event Handlers ---
 
     /**
+     * @description Saves current filter inputs to localStorage.
+    */
+    function saveFiltersToLocalStorage() {
+        try {
+            const filters = {
+                searchText: DOM.searchInput.value,
+                tag: DOM.tagFilterSelect.value,
+                showFavorites: DOM.favoritesFilterCheckbox.checked,
+                showHasBranches: DOM.branchesFilterCheckbox.checked,
+                startDate: DOM.startDateInput.value,
+                endDate: DOM.endDateInput.value
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(filters));
+        } catch (e) {
+            console.warn('Could not save filters to localStorage:', e);
+        }
+    }
+
+    /**
+     * @description Restores filter inputs from localStorage.
+    */
+    function loadFiltersFromLocalStorage() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) return;
+            const filters = JSON.parse(raw);
+            if (typeof filters.searchText === 'string') DOM.searchInput.value = filters.searchText;
+            if (typeof filters.tag === 'string') DOM.tagFilterSelect.value = filters.tag;
+            if (typeof filters.showFavorites === 'boolean') DOM.favoritesFilterCheckbox.checked = filters.showFavorites;
+            if (typeof filters.showHasBranches === 'boolean') DOM.branchesFilterCheckbox.checked = filters.showHasBranches;
+            if (typeof filters.startDate === 'string') DOM.startDateInput.value = filters.startDate;
+            if (typeof filters.endDate === 'string') DOM.endDateInput.value = filters.endDate;
+        } catch (e) {
+            console.warn('Could not load filters from localStorage:', e);
+        }
+    }
+
+    /**
+     * @description Resets all filters, clears localStorage, and refreshes the graph.
+    */
+    function clearFilters() {
+        DOM.searchInput.value = '';
+        DOM.tagFilterSelect.value = '';
+        DOM.favoritesFilterCheckbox.checked = false;
+        DOM.branchesFilterCheckbox.checked = false;
+        DOM.startDateInput.value = '';
+        DOM.endDateInput.value = '';
+        try {
+            localStorage.removeItem(STORAGE_KEY);
+        } catch (e) {
+            console.warn('Could not remove filters from localStorage:', e);
+        }
+        updateGraph(true);
+    }
+
+    /**
      * @description Handler for all filter controls. Uses debouncing to prevent
      * excessive graph redraws during text input.
     */
     function onFilterChange() {
+        saveFiltersToLocalStorage();
         clearTimeout(state.debounceTimer);
         state.debounceTimer = setTimeout(() => updateGraph(true), DEBOUNCE_DELAY);
     }
@@ -446,7 +480,14 @@
     */
     function setupEventListeners() {
         Object.values(DOM).filter(el => el && el.id && el.id.startsWith('filter-'))
-            .forEach(el => el.addEventListener('input', onFilterChange));
+            .forEach(el => {
+                el.addEventListener('input', onFilterChange);
+                el.addEventListener('change', onFilterChange);
+            });
+
+        if (DOM.clearFiltersBtn) {
+            DOM.clearFiltersBtn.addEventListener('click', clearFilters);
+        }
 
         DOM.manageTagsBtn.addEventListener('click', openTagManager);
         DOM.closeModalBtn.addEventListener('click', () => DOM.tagManagerModal.classList.add('hidden'));

@@ -408,6 +408,25 @@ body, html {
     display: block;
 }
 
+#clear-filters-btn {
+    width: 100%;
+    padding: 7px 10px;
+    margin-top: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    background-color: #fff;
+    color: var(--text-color-dark);
+    border: 1px solid var(--medium-gray);
+    border-radius: var(--border-radius-sm);
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+#clear-filters-btn:hover {
+    background-color: var(--light-gray);
+    border-color: #aaa;
+}
+
 .hidden {
     display: none !important;
 }

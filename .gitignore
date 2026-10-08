@@ -23,3 +23,7 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Temporary & Scratch
+.playwright*
+scratch/
