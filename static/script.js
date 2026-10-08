@@ -26,7 +26,9 @@
         favorites: '/api/favorites',
         tags: '/api/tags',
         allTags: '/api/all-tags',
-        chatData: 'chat_data.json'
+        chatData: 'chat_data.json',
+        refreshData: '/api/refresh-data',
+        refreshStatus: '/api/refresh-status'
     };
     const DOM = {
         loadingLabel: document.getElementById("loading"),
@@ -116,18 +118,45 @@
     async function handleRefreshClick() {
         DOM.refreshDataBtn.disabled = true;
         DOM.refreshSpinner.classList.remove('hidden');
-        showNotification('Fetching latest data from Google Drive... This may take a moment.', 'success');
+        showNotification('Initiating sync with Google Drive...', 'success');
 
         try {
-            const response = await fetch('/api/refresh-data', { method: 'POST' });
-            
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Failed to refresh data.');
+            const startResponse = await fetch(API.refreshData, { method: 'POST' });
+            if (!startResponse.ok) {
+                const errorData = await startResponse.json();
+                throw new Error(errorData.message || 'Failed to start data refresh.');
             }
 
+            // Poll background sync status every second
+            await new Promise((resolve, reject) => {
+                const pollInterval = setInterval(async () => {
+                    try {
+                        const statusRes = await fetch(API.refreshStatus);
+                        if (!statusRes.ok) {
+                            clearInterval(pollInterval);
+                            return reject(new Error('Failed to query sync status from server.'));
+                        }
+                        const statusData = await statusRes.json();
+
+                        if (statusData.status === 'running') {
+                            if (statusData.message) {
+                                showNotification(statusData.message, 'success');
+                            }
+                        } else if (statusData.status === 'success') {
+                            clearInterval(pollInterval);
+                            resolve(statusData);
+                        } else if (statusData.status === 'error') {
+                            clearInterval(pollInterval);
+                            reject(new Error(statusData.message || 'Sync failed on server.'));
+                        }
+                    } catch (pollErr) {
+                        clearInterval(pollInterval);
+                        reject(pollErr);
+                    }
+                }, 1000);
+            });
+
             showNotification('Data updated! Reloading graph...', 'success');
-            
             await loadAndRender();
 
         } catch (error) {
