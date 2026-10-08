@@ -6,10 +6,15 @@ from flask import Flask, request, jsonify, send_from_directory
 
 # --- Configuration ---
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # Limit request payloads to 2MB
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, 'static')
+
 DATA_FILES = {
-    'favorites': {'path': 'favorites.json', 'default': []},
-    'tags': {'path': 'tags.json', 'default': {}},
-    'all_tags': {'path': 'all_tags.json', 'default': []}
+    'favorites': {'path': os.path.join(BASE_DIR, 'favorites.json'), 'default': []},
+    'tags': {'path': os.path.join(BASE_DIR, 'tags.json'), 'default': {}},
+    'all_tags': {'path': os.path.join(BASE_DIR, 'all_tags.json'), 'default': []}
 }
 
 # --- Helper Functions ---
@@ -29,28 +34,48 @@ def read_json_file(filepath, default_value):
 
 def write_json_file(filepath, data):
     """
-    Safely writes data to a JSON file.
-    Returns True on success, False on error.
+    Safely and atomically writes data to a JSON file.
+    Writes to a temporary file first, then atomically replaces the destination.
     """
+    temp_filepath = f"{filepath}.tmp"
     try:
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2)
+        with open(temp_filepath, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_filepath, filepath)
         return True
     except Exception as e:
         print(f"Error writing to file {filepath}: {e}")
+        if os.path.exists(temp_filepath):
+            try:
+                os.remove(temp_filepath)
+            except OSError:
+                pass
         return False
 
 # --- Frontend Serving ---
 
 @app.route('/')
 def serve_index():
-    """Serves the main index.html page."""
-    return send_from_directory('.', 'index.html')
+    """Serves the main index.html page from the static directory."""
+    return send_from_directory(STATIC_DIR, 'index.html')
 
 @app.route('/<path:path>')
 def serve_static_files(path):
-    """Serves static files (CSS, JS, favicon, etc.)."""
-    return send_from_directory('.', path)
+    """
+    Serves static files exclusively from the static directory.
+    Prevents directory traversal and stops access to sensitive root files.
+    """
+    return send_from_directory(STATIC_DIR, path)
+
+@app.route('/chat_data.json')
+def serve_chat_data():
+    """Serves the generated chat data JSON file safely."""
+    chat_data_path = os.path.join(BASE_DIR, 'chat_data.json')
+    if not os.path.exists(chat_data_path):
+        return jsonify({"chats": [], "message": "Chat data not found. Please refresh data."}), 404
+    return send_from_directory(BASE_DIR, 'chat_data.json')
 
 # --- API Endpoints ---
 
@@ -62,7 +87,12 @@ def handle_favorites():
         data = read_json_file(config['path'], config['default'])
         return jsonify(data)
     if request.method == 'POST':
-        if write_json_file(config['path'], request.json):
+        if not request.is_json:
+            return jsonify({"status": "error", "message": "Expected JSON payload"}), 400
+        data = request.get_json(silent=True)
+        if not isinstance(data, list) or not all(isinstance(item, str) and 0 < len(item) <= 255 for item in data):
+            return jsonify({"status": "error", "message": "Favorites must be a list of non-empty string IDs"}), 400
+        if write_json_file(config['path'], data):
             return jsonify({"status": "success"})
         return jsonify({"status": "error", "message": "Failed to save favorites"}), 500
 
@@ -74,7 +104,17 @@ def handle_tags():
         data = read_json_file(config['path'], config['default'])
         return jsonify(data)
     if request.method == 'POST':
-        if write_json_file(config['path'], request.json):
+        if not request.is_json:
+            return jsonify({"status": "error", "message": "Expected JSON payload"}), 400
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"status": "error", "message": "Tags must be a dictionary mapping chat IDs to lists of tags"}), 400
+        for chat_id, tags in data.items():
+            if not isinstance(chat_id, str) or not isinstance(tags, list):
+                return jsonify({"status": "error", "message": "Invalid tag mapping structure"}), 400
+            if not all(isinstance(t, str) and 0 < len(t.strip()) <= 100 for t in tags):
+                return jsonify({"status": "error", "message": "Tags must be non-empty strings (max 100 chars)"}), 400
+        if write_json_file(config['path'], data):
             return jsonify({"status": "success"})
         return jsonify({"status": "error", "message": "Failed to save tags"}), 500
 
@@ -86,7 +126,12 @@ def handle_all_tags():
         data = read_json_file(config['path'], config['default'])
         return jsonify(data)
     if request.method == 'POST':
-        if write_json_file(config['path'], request.json):
+        if not request.is_json:
+            return jsonify({"status": "error", "message": "Expected JSON payload"}), 400
+        data = request.get_json(silent=True)
+        if not isinstance(data, list) or not all(isinstance(t, str) and 0 < len(t.strip()) <= 100 for t in data):
+            return jsonify({"status": "error", "message": "All tags must be a list of non-empty strings (max 100 chars)"}), 400
+        if write_json_file(config['path'], data):
             return jsonify({"status": "success"})
         return jsonify({"status": "error", "message": "Failed to save all tags"}), 500
 
@@ -108,5 +153,8 @@ def handle_refresh():
         }), 500
 
 if __name__ == '__main__':
-    print("Server is running! Open http://127.0.0.1:5000 in your browser.")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    host = os.environ.get('FLASK_RUN_HOST', '127.0.0.1')
+    port = int(os.environ.get('FLASK_RUN_PORT', 5000))
+    debug = os.environ.get('FLASK_DEBUG', 'False').lower() in ('true', '1')
+    print(f"Server is running! Open http://{host}:{port} in your browser.")
+    app.run(host=host, port=port, debug=debug)

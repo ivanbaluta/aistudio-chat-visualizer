@@ -513,7 +513,14 @@
      * @param {object} chatData - The chat data object.
     */
     function updateDescriptionPanel(chatData) {
-        DOM.descTitle.innerHTML = `<a href="https://aistudio.google.com/prompts/${chatData.fileId}" target="_blank">${chatData.fileName}</a>`;
+        DOM.descTitle.replaceChildren();
+        const titleLink = document.createElement('a');
+        titleLink.href = `https://aistudio.google.com/prompts/${encodeURIComponent(chatData.fileId)}`;
+        titleLink.target = '_blank';
+        titleLink.rel = 'noopener noreferrer';
+        titleLink.textContent = chatData.fileName;
+        DOM.descTitle.appendChild(titleLink);
+
         DOM.descContent.innerText = chatData.description || 'No description provided.';
         DOM.createdDateEl.innerText = `Created: ${chatData.createdDate.split('T')[0]}`;
         DOM.modifiedDateEl.innerText = `Modified: ${chatData.modifiedDate.split('T')[0]}`;
