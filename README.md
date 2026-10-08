@@ -75,15 +75,11 @@ cd aistudio-chat-visualizer
 
 This is the easiest way to run the application in an isolated container.
 
-1.  **Initial authentication** (run once to generate `token.json`):
+1.  **Initial authentication** (run once on the host to generate `token.json`):
     ```bash
     python read_chats.py
     ```
-    *Or run authentication via Docker without local Python:*
-    ```bash
-    docker-compose run --rm web python read_chats.py
-    ```
-    *A browser window will open for one-time Google authentication.*
+    *A browser window will open for one-time Google authentication. Once `token.json` is created in the project folder, Docker can use it directly.*
 
 2.  **Start the application:**
     ```bash

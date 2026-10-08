@@ -138,7 +138,7 @@ def download_and_parse_single_file(creds: Credentials, file_data: Dict[str, Any]
             if chunk.get("branchParent"):
                 parent_info = {"id": chunk["branchParent"].get("promptId")}
             if chunk.get("branchChildren"):
-                children_info = [{"id": child.get("promptId")} for child in chunk["branchChildren"]]
+                children_info.extend([{"id": child.get("promptId")} for child in chunk["branchChildren"]])
 
         return {
             "fileName": file_name,
