@@ -105,18 +105,29 @@
         }
     }
 
+    let notificationTimeout = null;
+
     /**
-     * @description Displays a notification for a few seconds.
+     * @description Displays a status message to the user.
      * @param {string} message
      * @param {'success' | 'error'} type
+     * @param {number} [duration=5000] - Duration in ms before hiding. 0 to keep visible.
     */
-    function showNotification(message, type) {
+    function showNotification(message, type, duration = 5000) {
+        if (notificationTimeout) {
+            clearTimeout(notificationTimeout);
+            notificationTimeout = null;
+        }
+
         DOM.notificationBar.textContent = message;
         DOM.notificationBar.className = type; // 'success' or 'error'
         
-        setTimeout(() => {
-            DOM.notificationBar.className = 'hidden';
-        }, 5000);
+        if (duration > 0) {
+            notificationTimeout = setTimeout(() => {
+                DOM.notificationBar.className = 'hidden';
+                notificationTimeout = null;
+            }, duration);
+        }
     }
 
     /**
@@ -126,7 +137,7 @@
     async function handleRefreshClick() {
         DOM.refreshDataBtn.disabled = true;
         DOM.refreshSpinner.classList.remove('hidden');
-        showNotification('Initiating sync with Google Drive...', 'success');
+        showNotification('Initiating sync with Google Drive...', 'success', 0);
 
         try {
             const startResponse = await fetch(API.refreshData, { method: 'POST' });
@@ -148,28 +159,30 @@
 
                         if (statusData.status === 'running') {
                             if (statusData.message) {
-                                showNotification(statusData.message, 'success');
+                                showNotification(statusData.message, 'success', 0);
                             }
                         } else if (statusData.status === 'success') {
                             clearInterval(pollInterval);
+                            showNotification('Data updated! Reloading graph...', 'success', 4000);
                             resolve(statusData);
                         } else if (statusData.status === 'error') {
                             clearInterval(pollInterval);
+                            showNotification(statusData.message || 'Sync failed on server.', 'error', 6000);
                             reject(new Error(statusData.message || 'Sync failed on server.'));
                         }
                     } catch (pollErr) {
                         clearInterval(pollInterval);
+                        showNotification(pollErr.message, 'error', 6000);
                         reject(pollErr);
                     }
                 }, 1000);
             });
 
-            showNotification('Data updated! Reloading graph...', 'success');
             await loadAndRender();
 
         } catch (error) {
             console.error('Refresh failed:', error);
-            showNotification(error.message, 'error');
+            showNotification(error.message, 'error', 6000);
         } finally {
             DOM.refreshDataBtn.disabled = false;
             DOM.refreshSpinner.classList.add('hidden');
@@ -191,6 +204,7 @@
         if (chatRes.ok) {
             const dataFromFile = await chatRes.json();
             state.fullChatData = dataFromFile.chats || [];
+            state.fullChatData.sort((a, b) => new Date(b.modifiedDate || 0) - new Date(a.modifiedDate || 0));
         } else {
             state.fullChatData = [];
         }

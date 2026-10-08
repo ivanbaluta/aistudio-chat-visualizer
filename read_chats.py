@@ -80,15 +80,20 @@ def find_aistudio_folder_id(service: Any) -> Optional[str]:
     return response['files'][0]['id']
 
 def fetch_all_files(service: Any, folder_id: str) -> List[Dict[str, Any]]:
-    """Retrieves a list of all files from the specified folder, handling pagination."""
+    """Retrieves a list of all prompt files from the specified folder, handling pagination."""
     files = []
     page_token = None
-    query = f"'{folder_id}' in parents and trashed=false"
+    query = (
+        f"'{folder_id}' in parents and "
+        "mimeType='application/vnd.google-makersuite.prompt' and "
+        "trashed=false"
+    )
 
-    print("--- Fetching file list from Google Drive... ---")
+    print("--- Fetching prompt files from Google Drive... ---")
     while True:
         response = service.files().list(
             q=query, spaces='drive', pageSize=1000,
+            orderBy='modifiedTime desc',
             fields="nextPageToken, files(id, name, description, createdTime, modifiedTime, mimeType)",
             pageToken=page_token
         ).execute()
@@ -96,7 +101,7 @@ def fetch_all_files(service: Any, folder_id: str) -> List[Dict[str, Any]]:
         page_token = response.get('nextPageToken', None)
         if page_token is None:
             break
-    print(f"--- Found {len(files)} total files in folder. ---")
+    print(f"--- Found {len(files)} total chats in folder. ---")
     return files
 
 def load_existing_cache(filename: str) -> Dict[str, Dict[str, Any]]:
@@ -107,7 +112,11 @@ def load_existing_cache(filename: str) -> Dict[str, Dict[str, Any]]:
         with open(filename, "r", encoding="utf-8") as f:
             data = json.load(f)
             chats = data.get("chats", [])
-            cache = {chat["fileId"]: chat for chat in chats if "fileId" in chat}
+            cache = {
+                chat["fileId"]: chat for chat in chats
+                if isinstance(chat, dict) and "fileId" in chat
+                and not chat.get("fileName", "").lower().endswith((".json", ".txt", ".lock"))
+            }
             print(f"--- Loaded {len(cache)} chats from cache. ---")
             return cache
     except Exception as e:
@@ -130,6 +139,9 @@ def download_and_parse_single_file(creds: Credentials, file_data: Dict[str, Any]
 
         file_content = fh.getvalue().decode('utf-8')
         data = json.loads(file_content)
+
+        if not isinstance(data, dict) or "chunkedPrompt" not in data:
+            return None
 
         parent_info = None
         children_info = []
@@ -230,6 +242,7 @@ def process_files(
     else:
         print("--- All files are up to date in cache. ---")
 
+    chat_map.sort(key=lambda c: c.get("modifiedDate") or "", reverse=True)
     return chat_map
 
 def sanitize_chat_links(chat_map: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
