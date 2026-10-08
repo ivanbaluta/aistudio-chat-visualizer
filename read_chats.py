@@ -31,15 +31,24 @@ def get_thread_drive_service(creds: Credentials) -> Any:
 
 # --- Core Functions ---
 
-def authenticate() -> Optional[Credentials]:
+def authenticate(interactive: bool = True) -> Optional[Credentials]:
     """
     Handles user authentication via OAuth2.
     Creates or refreshes the token.json file.
     Returns the credentials object.
     """
+    if not os.path.exists(CREDENTIALS_FILE):
+        raise FileNotFoundError(
+            f"'{CREDENTIALS_FILE}' not found. Download OAuth credentials from Google Cloud Console."
+        )
+
     creds = None
     if os.path.exists(TOKEN_FILE):
-        creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+        try:
+            creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+        except Exception as e:
+            print(f"Failed to read token file: {e}")
+            creds = None
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
@@ -47,9 +56,14 @@ def authenticate() -> Optional[Credentials]:
                 creds.refresh(Request())
             except Exception as e:
                 print(f"Failed to refresh token: {e}. Please authenticate again.")
-                creds = None  # Reset to trigger the auth flow
+                creds = None
 
         if not creds:
+            if not interactive:
+                raise RuntimeError(
+                    f"'{TOKEN_FILE}' not found or expired. Run 'python read_chats.py' in terminal to authenticate."
+                )
+
             flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
             creds = flow.run_local_server(port=0)
 
@@ -261,10 +275,10 @@ def save_data(folder_id: str, chat_map: List[Dict[str, Any]], filename: str):
 
 # --- Main Execution ---
 
-def main(progress_callback: Optional[Callable[[int, int, str], None]] = None):
+def main(interactive: bool = True, progress_callback: Optional[Callable[[int, int, str], None]] = None):
     """Main function to run the sync script."""
     try:
-        creds = authenticate()
+        creds = authenticate(interactive=interactive)
         if not creds:
             print("Authentication failed. Exiting.")
             raise RuntimeError("Authentication failed")

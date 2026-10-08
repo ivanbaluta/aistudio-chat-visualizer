@@ -73,18 +73,25 @@ cd aistudio-chat-visualizer
 
 ### Method 1: Running with Docker (Recommended)
 
-This is the easiest way to run the application without manually installing Python or dependencies.
+This is the easiest way to run the application in an isolated container.
 
-1.  **Run the application** with a single command from the project's root folder:
-    ```bash
-    docker-compose up --build -d
-    ```
-2.  **Fetch your chat data** (run this on first launch and to update):
+1.  **Initial authentication** (run once to generate `token.json`):
     ```bash
     python read_chats.py
     ```
-    *The very first time you run this, a browser window will open for authentication.*
+    *Or run authentication via Docker without local Python:*
+    ```bash
+    docker-compose run --rm web python read_chats.py
+    ```
+    *A browser window will open for one-time Google authentication.*
+
+2.  **Start the application:**
+    ```bash
+    docker-compose up --build -d
+    ```
+
 3.  **Open the application** in your browser at [http://127.0.0.1:5000](http://127.0.0.1:5000).
+    *(Subsequent data updates can be triggered directly via the "🔄 Refresh Data from Drive" button in the UI).*
 
 **To stop the application:**
 ```bash

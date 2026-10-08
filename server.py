@@ -155,7 +155,7 @@ def run_sync_task():
                 sync_state["message"] = msg
 
         print("--- Background sync task started. ---")
-        read_chats.main(progress_callback=on_progress)
+        read_chats.main(interactive=False, progress_callback=on_progress)
         print("--- Background sync task finished successfully. ---")
         with sync_lock:
             sync_state["status"] = "success"
