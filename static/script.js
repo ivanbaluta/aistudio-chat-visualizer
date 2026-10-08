@@ -65,7 +65,7 @@
 
     /**
      * @async
-     * @description Loads all data and completely redraws the graph.
+     * @description Loads all data and renders the graph.
     */
     async function loadAndRender() {
         state.isFirstDraw = true;
@@ -74,9 +74,16 @@
 
         await loadInitialData();
         populateUI();
+
+        if (state.fullChatData.length === 0) {
+            DOM.loadingLabel.innerText = "No chat data found. Click '🔄 Refresh Data from Drive' to sync your chats.";
+            DOM.loadingLabel.style.display = 'block';
+            DOM.chatCounter.innerText = "Showing: 0 of 0";
+            return;
+        }
+
         if (!state.network) {
             createNetworkGraph();
-            setupEventListeners();
         }
         onFilterChange();
 
@@ -89,10 +96,11 @@
      * @description Main entry point. Called once when the page loads.
     */
     async function initialize() {
+        setupEventListeners();
         try {
             await loadAndRender();
         } catch (error) {
-            DOM.loadingLabel.innerText = "Error! Failed to load or process data.";
+            DOM.loadingLabel.innerText = "Error loading data. Click '🔄 Refresh Data from Drive' to retry.";
             console.error("Initialization Error:", error);
         }
     }
@@ -173,15 +181,19 @@
      * @description Loads all necessary data from the server in parallel.
     */
     async function loadInitialData() {
-        // Using Promise.all allows all network requests to run concurrently, speeding up the initial load.
         const [favRes, tagsRes, allTagsRes, chatRes] = await Promise.all([
             fetch(API.favorites), fetch(API.tags), fetch(API.allTags), fetch(API.chatData)
         ]);
-        state.favoriteIds = new Set(await favRes.json());
-        state.tagsData = await tagsRes.json();
-        state.allTags = await allTagsRes.json();
-        const dataFromFile = await chatRes.json();
-        state.fullChatData = dataFromFile.chats;
+        state.favoriteIds = new Set(favRes.ok ? await favRes.json() : []);
+        state.tagsData = tagsRes.ok ? await tagsRes.json() : {};
+        state.allTags = allTagsRes.ok ? await allTagsRes.json() : [];
+
+        if (chatRes.ok) {
+            const dataFromFile = await chatRes.json();
+            state.fullChatData = dataFromFile.chats || [];
+        } else {
+            state.fullChatData = [];
+        }
 
         const rootNode = state.fullChatData.find(chat => chat.parent === null);
         state.focusNodeId = rootNode ? rootNode.fileId : (state.fullChatData.length > 0 ? state.fullChatData[0].fileId : null);
@@ -223,6 +235,7 @@
             }
         };
         state.network = new vis.Network(DOM.networkContainer, data, options);
+        state.network.on("click", handleGraphClick);
     }
 
     /**
@@ -304,13 +317,22 @@
     // --- Rendering Logic ---
 
     /**
-     * @description Clears and redraws the graph's nodes and edges based on the filtered data.
+     * @description Updates the graph nodes and edges based on the filtered data.
      * @param {Array<object>} dataToRender - The final array of data to display.
     */
     function renderGraph(dataToRender) {
-        const newNodes = [];
-        const newEdges = [];
-        const nodesInGraph = new Set(dataToRender.map(c => c.fileId));
+        const activeNodeIds = new Set(dataToRender.map(c => c.fileId));
+        const currentNodeIds = new Set(state.nodesDataSet.getIds());
+
+        const nodesToAdd = [];
+        const nodesToUpdate = [];
+        const nodeIdsToRemove = [];
+
+        currentNodeIds.forEach(id => {
+            if (!activeNodeIds.has(id)) {
+                nodeIdsToRemove.push(id);
+            }
+        });
 
         dataToRender.forEach(chat => {
             const nodeObject = {
@@ -319,20 +341,43 @@
                 color: state.favoriteIds.has(chat.fileId) ? '#FFD700' : '#97C2FC'
             };
             if (chat.description) nodeObject.title = chat.description;
-            newNodes.push(nodeObject);
 
-            if (chat.parent) {
-                const parentId = chat.parent.id.replace('prompts/', '');
-                if (nodesInGraph.has(parentId)) {
-                    newEdges.push({ from: parentId, to: chat.fileId, arrows: "to" });
-                }
+            if (currentNodeIds.has(chat.fileId)) {
+                nodesToUpdate.push(nodeObject);
+            } else {
+                nodesToAdd.push(nodeObject);
             }
         });
 
-        state.nodesDataSet.clear();
-        state.edgesDataSet.clear();
-        state.nodesDataSet.add(newNodes);
-        state.edgesDataSet.add(newEdges);
+        const currentEdgeIds = new Set(state.edgesDataSet.getIds());
+        const targetEdges = [];
+        dataToRender.forEach(chat => {
+            if (chat.parent) {
+                const parentId = chat.parent.id.replace('prompts/', '');
+                if (activeNodeIds.has(parentId)) {
+                    targetEdges.push({
+                        id: `${parentId}->${chat.fileId}`,
+                        from: parentId,
+                        to: chat.fileId,
+                        arrows: "to"
+                    });
+                }
+            }
+        });
+        const targetEdgeIds = new Set(targetEdges.map(e => e.id));
+        const edgeIdsToRemove = [];
+        currentEdgeIds.forEach(id => {
+            if (!targetEdgeIds.has(id)) {
+                edgeIdsToRemove.push(id);
+            }
+        });
+        const edgesToAdd = targetEdges.filter(e => !currentEdgeIds.has(e.id));
+
+        if (nodeIdsToRemove.length > 0) state.nodesDataSet.remove(nodeIdsToRemove);
+        if (edgeIdsToRemove.length > 0) state.edgesDataSet.remove(edgeIdsToRemove);
+        if (nodesToUpdate.length > 0) state.nodesDataSet.update(nodesToUpdate);
+        if (nodesToAdd.length > 0) state.nodesDataSet.add(nodesToAdd);
+        if (edgesToAdd.length > 0) state.edgesDataSet.add(edgesToAdd);
     }
 
     /**
@@ -386,8 +431,7 @@
      * @description Sets up all primary event listeners for the application.
     */
     function setupEventListeners() {
-        // Efficiently assign a single handler to all filter inputs.
-        Object.values(DOM).filter(el => el.id && el.id.startsWith('filter-'))
+        Object.values(DOM).filter(el => el && el.id && el.id.startsWith('filter-'))
             .forEach(el => el.addEventListener('input', onFilterChange));
 
         DOM.manageTagsBtn.addEventListener('click', openTagManager);
@@ -396,7 +440,6 @@
         DOM.closeDescPanelBtn.addEventListener('click', () => DOM.descriptionPanel.classList.add('hidden'));
         DOM.favoriteStar.addEventListener('click', handleFavoriteToggle);
         DOM.addTagSelect.addEventListener('change', handleAddTagToChat);
-        state.network.on("click", handleGraphClick);
         DOM.refreshDataBtn.addEventListener('click', handleRefreshClick);
     }
 
@@ -413,7 +456,11 @@
                 state.allTags.sort();
                 event.target.value = '';
                 renderAllTagsList();
-                await saveAllTagsToServer();
+                const success = await saveAllTagsToServer();
+                if (!success) {
+                    state.allTags = state.allTags.filter(t => t !== newTag);
+                    renderAllTagsList();
+                }
             }
         }
     }
@@ -425,19 +472,37 @@
     async function handleFavoriteToggle() {
         if (!state.currentOpenChatId) return;
         const nodeId = state.currentOpenChatId;
-        if (state.favoriteIds.has(nodeId)) {
+        const wasFavorite = state.favoriteIds.has(nodeId);
+
+        if (wasFavorite) {
             state.favoriteIds.delete(nodeId);
         } else {
             state.favoriteIds.add(nodeId);
         }
         updateFavoriteStar(nodeId);
         state.nodesDataSet.update({ id: nodeId, color: state.favoriteIds.has(nodeId) ? '#FFD700' : '#97C2FC' });
-        await fetch(API.favorites, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(Array.from(state.favoriteIds))
-        });
-        updateGraph(false);
+
+        try {
+            const response = await fetch(API.favorites, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(Array.from(state.favoriteIds))
+            });
+            if (!response.ok) {
+                throw new Error('Failed to save favorites to server.');
+            }
+            updateGraph(false);
+        } catch (error) {
+            if (wasFavorite) {
+                state.favoriteIds.add(nodeId);
+            } else {
+                state.favoriteIds.delete(nodeId);
+            }
+            updateFavoriteStar(nodeId);
+            state.nodesDataSet.update({ id: nodeId, color: wasFavorite ? '#FFD700' : '#97C2FC' });
+            showNotification(error.message, 'error');
+            console.error('Favorite toggle failed:', error);
+        }
     }
 
     /**
@@ -454,7 +519,12 @@
             }
             DOM.addTagSelect.value = '';
             renderTagsForChat(state.currentOpenChatId);
-            await saveTagsToServer();
+
+            const success = await saveTagsToServer();
+            if (!success) {
+                state.tagsData[state.currentOpenChatId] = state.tagsData[state.currentOpenChatId].filter(t => t !== newTag);
+                renderTagsForChat(state.currentOpenChatId);
+            }
         }
     }
 
@@ -500,13 +570,22 @@
             removeBtn.className = 'remove-tag';
             removeBtn.innerText = '×';
             removeBtn.onclick = async () => {
+                const prevAllTags = [...state.allTags];
+                const prevTagsData = JSON.parse(JSON.stringify(state.tagsData));
+
                 state.allTags = state.allTags.filter(t => t !== tag);
                 for (const chatId in state.tagsData) {
                     state.tagsData[chatId] = state.tagsData[chatId].filter(t => t !== tag);
                 }
-                await saveTagsToServer(); // Save the updated chat-tag assignments
                 renderAllTagsList();
-                await saveAllTagsToServer(); // Save the updated global tag list
+
+                const tagsOk = await saveTagsToServer();
+                const allTagsOk = await saveAllTagsToServer();
+                if (!tagsOk || !allTagsOk) {
+                    state.allTags = prevAllTags;
+                    state.tagsData = prevTagsData;
+                    renderAllTagsList();
+                }
             };
             tagEl.appendChild(removeBtn);
             DOM.allTagsList.appendChild(tagEl);
@@ -528,9 +607,14 @@
             removeBtn.className = 'remove-tag';
             removeBtn.innerText = '×';
             removeBtn.onclick = async () => {
+                const prevTags = [...(state.tagsData[chatId] || [])];
                 state.tagsData[chatId] = state.tagsData[chatId].filter(t => t !== tag);
                 renderTagsForChat(chatId);
-                await saveTagsToServer();
+                const success = await saveTagsToServer();
+                if (!success) {
+                    state.tagsData[chatId] = prevTags;
+                    renderTagsForChat(chatId);
+                }
             };
             tagEl.appendChild(removeBtn);
             DOM.descTagsList.appendChild(tagEl);
@@ -593,9 +677,23 @@
      * @description Saves the global list of tags to the server and updates the UI.
     */
     async function saveAllTagsToServer() {
-        await fetch(API.allTags, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state.allTags) });
-        populateTagFilter();
-        populateTagAddSelect();
+        try {
+            const response = await fetch(API.allTags, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(state.allTags)
+            });
+            if (!response.ok) {
+                throw new Error('Failed to save tags to server.');
+            }
+            populateTagFilter();
+            populateTagAddSelect();
+            return true;
+        } catch (error) {
+            showNotification(error.message, 'error');
+            console.error('Save all tags error:', error);
+            return false;
+        }
     }
 
     /**
@@ -603,8 +701,22 @@
      * @description Saves the tag assignments for chats to the server and updates the graph.
     */
     async function saveTagsToServer() {
-        await fetch(API.tags, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state.tagsData) });
-        updateGraph(false);
+        try {
+            const response = await fetch(API.tags, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(state.tagsData)
+            });
+            if (!response.ok) {
+                throw new Error('Failed to save chat tags to server.');
+            }
+            updateGraph(false);
+            return true;
+        } catch (error) {
+            showNotification(error.message, 'error');
+            console.error('Save tags error:', error);
+            return false;
+        }
     }
 
     /**
