@@ -55,6 +55,24 @@ def write_json_file(filepath, data):
                 pass
         return False
 
+def cleanup_on_startup():
+    """Performs safe initial cleanup of orphaned favorites and tags if chat_data.json exists."""
+    chat_data_path = os.path.join(BASE_DIR, 'chat_data.json')
+    if os.path.exists(chat_data_path):
+        try:
+            data = read_json_file(chat_data_path, {})
+            chats = data.get('chats', [])
+            if isinstance(chats, list) and len(chats) > 0:
+                read_chats.cleanup_orphaned_data(
+                    chats,
+                    favorites_file=DATA_FILES['favorites']['path'],
+                    tags_file=DATA_FILES['tags']['path']
+                )
+        except Exception as e:
+            print(f"Startup cleanup warning: {e}")
+
+cleanup_on_startup()
+
 # --- Frontend Serving ---
 
 @app.route('/')

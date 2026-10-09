@@ -13,9 +13,12 @@ from typing import List, Dict, Any, Optional, Callable
 
 # --- Configuration ---
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
-CREDENTIALS_FILE = "credentials.json"
-TOKEN_FILE = "token.json"
-OUTPUT_FILE = "chat_data.json"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CREDENTIALS_FILE = os.path.join(BASE_DIR, "credentials.json")
+TOKEN_FILE = os.path.join(BASE_DIR, "token.json")
+OUTPUT_FILE = os.path.join(BASE_DIR, "chat_data.json")
+FAVORITES_FILE = os.path.join(BASE_DIR, "favorites.json")
+TAGS_FILE = os.path.join(BASE_DIR, "tags.json")
 # This is a literal folder name and should not be changed unless your folder is named differently.
 AI_STUDIO_FOLDER_NAME = "Google AI Studio"
 MAX_WORKERS = 6
@@ -286,6 +289,78 @@ def save_data(folder_id: str, chat_map: List[Dict[str, Any]], filename: str):
                 pass
         raise
 
+def cleanup_orphaned_data(
+    chat_map: List[Dict[str, Any]],
+    favorites_file: Optional[str] = None,
+    tags_file: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Removes entries from favorites.json and tags.json that are not present in chat_map.
+    Safeguards against empty or invalid chat_map to prevent accidental data loss.
+    """
+    fav_path = favorites_file or FAVORITES_FILE
+    tags_path = tags_file or TAGS_FILE
+
+    valid_ids = {
+        chat["fileId"] for chat in chat_map
+        if isinstance(chat, dict) and chat.get("fileId")
+    }
+
+    stats = {
+        "removed_favorites": 0,
+        "removed_tags": 0,
+        "removed_favorite_ids": [],
+        "removed_tag_ids": []
+    }
+
+    if not valid_ids:
+        print("--- Cleanup skipped: No valid chat IDs found in chat data. ---")
+        return stats
+
+    # Clean favorites.json
+    if os.path.exists(fav_path):
+        try:
+            with open(fav_path, "r", encoding="utf-8") as f:
+                favorites = json.load(f)
+            if isinstance(favorites, list):
+                cleaned_favorites = [fid for fid in favorites if fid in valid_ids]
+                removed_favs = [fid for fid in favorites if fid not in valid_ids]
+                if removed_favs:
+                    temp_fav = f"{fav_path}.tmp"
+                    with open(temp_fav, "w", encoding="utf-8") as f:
+                        json.dump(cleaned_favorites, f, indent=2, ensure_ascii=False)
+                        f.flush()
+                        os.fsync(f.fileno())
+                    os.replace(temp_fav, fav_path)
+                    stats["removed_favorites"] = len(removed_favs)
+                    stats["removed_favorite_ids"] = removed_favs
+                    print(f"--- Cleaned up {len(removed_favs)} orphaned favorites: {removed_favs} ---")
+        except Exception as e:
+            print(f"--- Warning: Could not clean up {fav_path}: {e} ---")
+
+    # Clean tags.json
+    if os.path.exists(tags_path):
+        try:
+            with open(tags_path, "r", encoding="utf-8") as f:
+                tags = json.load(f)
+            if isinstance(tags, dict):
+                cleaned_tags = {cid: tlist for cid, tlist in tags.items() if cid in valid_ids}
+                removed_tags = [cid for cid in tags.keys() if cid not in valid_ids]
+                if removed_tags:
+                    temp_tags = f"{tags_path}.tmp"
+                    with open(temp_tags, "w", encoding="utf-8") as f:
+                        json.dump(cleaned_tags, f, indent=2, ensure_ascii=False)
+                        f.flush()
+                        os.fsync(f.fileno())
+                    os.replace(temp_tags, tags_path)
+                    stats["removed_tags"] = len(removed_tags)
+                    stats["removed_tag_ids"] = removed_tags
+                    print(f"--- Cleaned up {len(removed_tags)} orphaned tag entries: {removed_tags} ---")
+        except Exception as e:
+            print(f"--- Warning: Could not clean up {tags_path}: {e} ---")
+
+    return stats
+
 # --- Main Execution ---
 
 def main(interactive: bool = True, progress_callback: Optional[Callable[[int, int, str], None]] = None):
@@ -310,6 +385,7 @@ def main(interactive: bool = True, progress_callback: Optional[Callable[[int, in
         raw_chat_map = process_files(creds, all_files, existing_cache, progress_callback)
         sanitized_chat_map = sanitize_chat_links(raw_chat_map)
         save_data(folder_id, sanitized_chat_map, OUTPUT_FILE)
+        cleanup_orphaned_data(sanitized_chat_map)
 
         if progress_callback:
             progress_callback(len(all_files), len(all_files), f"Successfully synced {len(sanitized_chat_map)} chats.")
