@@ -785,23 +785,37 @@
     }
 
     /**
-     * @description Builds and sets the "smart" link to the source file in Google Drive.
+     * @description Builds and sets the link to the source file in Google Drive,
+     * refining the search with exact title, creation date bounds, and type exclusions.
      * @param {object} chatData - The chat data object.
     */
     function updateSourceFileLink(chatData) {
-        const encodedFileName = encodeURIComponent(`"${chatData.fileName}"`);
-        let exclusionsString = ' -type:image -type:document -type:spreadsheet -type:pdf -type:presentation -type-drawing -type:form';
-        
-        // Dynamically create an exclusion for child branches to provide a cleaner search result.
+        const sanitizedName = chatData.fileName.replace(/"/g, '');
+        const queryParts = [`title:"${sanitizedName}"`];
+
+        if (chatData.createdDate) {
+            const created = new Date(chatData.createdDate);
+            if (!isNaN(created.getTime())) {
+                const pad = (n) => String(n).padStart(2, '0');
+                const formatDate = (d) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+                const afterBound = new Date(created.getTime() - 24 * 60 * 60 * 1000);
+                const beforeBound = new Date(created.getTime() + 2 * 24 * 60 * 60 * 1000);
+                queryParts.push(`createdafter:${formatDate(afterBound)}`);
+                queryParts.push(`createdbefore:${formatDate(beforeBound)}`);
+            }
+        }
+
+        let exclusions = '-type:image -type:document -type:spreadsheet -type:pdf -type:presentation -type:drawing -type:form -type:folder';
         const branchDepth = (chatData.fileName.match(/Branch of /g) || []).length;
         if (branchDepth === 0) {
-            exclusionsString += ` -"Branch of"`;
+            exclusions += ' -"Branch of"';
         } else {
             const nextLevelPrefix = "Branch of ".repeat(branchDepth + 1);
-            exclusionsString += ` -"${nextLevelPrefix}"`;
+            exclusions += ` -"${nextLevelPrefix}"`;
         }
-        const encodedExclusions = encodeURIComponent(exclusionsString);
-        DOM.sourceFileLink.href = `https://drive.google.com/drive/search?q=${encodedFileName}${encodedExclusions}`;
+        queryParts.push(exclusions);
+
+        DOM.sourceFileLink.href = `https://drive.google.com/drive/search?q=${encodeURIComponent(queryParts.join(' '))}`;
     }
 
     /**
