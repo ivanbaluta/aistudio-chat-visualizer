@@ -68,11 +68,15 @@
             <label for="filter-search" class="visually-hidden">Search by name</label>
             <input type="text" id="filter-search" placeholder="Search by name...">
         </div>
-        <div>
-            <label for="filter-by-tag" class="visually-hidden">Filter by tag</label>
-            <select id="filter-by-tag">
-                <option value="">All Tags</option>
-            </select>
+        <div class="filter-panel__tags-section">
+            <div class="filter-panel__tags-header">
+                <span class="filter-panel__tags-label">Filter by tags:</span>
+                <div class="filter-panel__tag-mode-toggle" id="tag-mode-toggle" title="Filter mode: match Any tag or All tags">
+                    <button type="button" class="tag-mode-btn active" data-mode="OR" id="tag-mode-or">Any</button>
+                    <button type="button" class="tag-mode-btn" data-mode="AND" id="tag-mode-and">All</button>
+                </div>
+            </div>
+            <div id="filter-tags-list" class="filter-tags-chips"></div>
         </div>
         <div class="filter-panel__checkbox-group">
             <div class="filter-panel__checkbox">

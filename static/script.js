@@ -12,6 +12,8 @@
         favoriteIds: new Set(),
         tagsData: {},
         allTags: [],
+        selectedTags: new Set(),
+        tagMatchMode: 'OR',
         network: null,
         nodesDataSet: new vis.DataSet([]),
         edgesDataSet: new vis.DataSet([]),
@@ -35,7 +37,9 @@
         loadingLabel: document.getElementById("loading"),
         networkContainer: document.getElementById("mynetwork"),
         searchInput: document.getElementById('filter-search'),
-        tagFilterSelect: document.getElementById('filter-by-tag'),
+        filterTagsList: document.getElementById('filter-tags-list'),
+        tagModeOrBtn: document.getElementById('tag-mode-or'),
+        tagModeAndBtn: document.getElementById('tag-mode-and'),
         favoritesFilterCheckbox: document.getElementById('filter-favorites'),
         branchesFilterCheckbox: document.getElementById('filter-has-branches'),
         startDateInput: document.getElementById('filter-date-start'),
@@ -279,7 +283,8 @@
     function getActiveFilters() {
         return {
             searchText: DOM.searchInput.value.toLowerCase(),
-            tag: DOM.tagFilterSelect.value,
+            selectedTags: state.selectedTags,
+            tagMatchMode: state.tagMatchMode,
             showFavorites: DOM.favoritesFilterCheckbox.checked,
             showHasBranches: DOM.branchesFilterCheckbox.checked,
             startDate: DOM.startDateInput.value,
@@ -287,16 +292,26 @@
         };
     }
 
-    
     /**
      * @description Applies filters to the full chat dataset.
      * @param {object} filters - The filter settings object from getActiveFilters.
      * @returns {Array<object>} A filtered array of chats.
     */
     function applyFilters(filters) {
+        const hasTagFilter = filters.selectedTags && filters.selectedTags.size > 0;
+        const isAndMode = filters.tagMatchMode === 'AND';
+
         return state.fullChatData.filter(chat => {
-            const chatTags = state.tagsData[chat.fileId] || [];
-            const tagMatch = !filters.tag || chatTags.includes(filters.tag);
+            let tagMatch = true;
+            if (hasTagFilter) {
+                const chatTags = state.tagsData[chat.fileId] || [];
+                if (isAndMode) {
+                    tagMatch = Array.from(filters.selectedTags).every(t => chatTags.includes(t));
+                } else {
+                    tagMatch = Array.from(filters.selectedTags).some(t => chatTags.includes(t));
+                }
+            }
+
             const searchMatch = !filters.searchText || chat.fileName.toLowerCase().includes(filters.searchText);
             const favoriteMatch = !filters.showFavorites || state.favoriteIds.has(chat.fileId);
             const branchMatch = !filters.showHasBranches || (chat.parent !== null || chat.children.length > 0);
@@ -416,7 +431,8 @@
         try {
             const filters = {
                 searchText: DOM.searchInput.value,
-                tag: DOM.tagFilterSelect.value,
+                selectedTags: Array.from(state.selectedTags),
+                tagMatchMode: state.tagMatchMode,
                 showFavorites: DOM.favoritesFilterCheckbox.checked,
                 showHasBranches: DOM.branchesFilterCheckbox.checked,
                 startDate: DOM.startDateInput.value,
@@ -437,7 +453,27 @@
             if (!raw) return;
             const filters = JSON.parse(raw);
             if (typeof filters.searchText === 'string') DOM.searchInput.value = filters.searchText;
-            if (typeof filters.tag === 'string') DOM.tagFilterSelect.value = filters.tag;
+
+            state.selectedTags.clear();
+            if (Array.isArray(filters.selectedTags)) {
+                filters.selectedTags.forEach(t => {
+                    if (typeof t === 'string' && t) state.selectedTags.add(t);
+                });
+            } else if (typeof filters.tag === 'string' && filters.tag) {
+                state.selectedTags.add(filters.tag);
+            }
+
+            if (filters.tagMatchMode === 'AND' || filters.tagMatchMode === 'OR') {
+                state.tagMatchMode = filters.tagMatchMode;
+            } else {
+                state.tagMatchMode = 'OR';
+            }
+            if (DOM.tagModeOrBtn && DOM.tagModeAndBtn) {
+                DOM.tagModeOrBtn.classList.toggle('active', state.tagMatchMode === 'OR');
+                DOM.tagModeAndBtn.classList.toggle('active', state.tagMatchMode === 'AND');
+            }
+            populateTagFilter();
+
             if (typeof filters.showFavorites === 'boolean') DOM.favoritesFilterCheckbox.checked = filters.showFavorites;
             if (typeof filters.showHasBranches === 'boolean') DOM.branchesFilterCheckbox.checked = filters.showHasBranches;
             if (typeof filters.startDate === 'string') DOM.startDateInput.value = filters.startDate;
@@ -448,11 +484,32 @@
     }
 
     /**
+     * @description Sets the tag match mode ('OR' for Any, 'AND' for All).
+     * @param {'OR' | 'AND'} mode
+    */
+    function setTagMatchMode(mode) {
+        if (state.tagMatchMode === mode) return;
+        state.tagMatchMode = mode;
+        if (DOM.tagModeOrBtn && DOM.tagModeAndBtn) {
+            DOM.tagModeOrBtn.classList.toggle('active', mode === 'OR');
+            DOM.tagModeAndBtn.classList.toggle('active', mode === 'AND');
+        }
+        onFilterChange();
+    }
+
+    /**
      * @description Resets all filters, clears localStorage, and refreshes the graph.
     */
     function clearFilters() {
         DOM.searchInput.value = '';
-        DOM.tagFilterSelect.value = '';
+        state.selectedTags.clear();
+        state.tagMatchMode = 'OR';
+        if (DOM.tagModeOrBtn && DOM.tagModeAndBtn) {
+            DOM.tagModeOrBtn.classList.add('active');
+            DOM.tagModeAndBtn.classList.remove('active');
+        }
+        populateTagFilter();
+
         DOM.favoritesFilterCheckbox.checked = false;
         DOM.branchesFilterCheckbox.checked = false;
         DOM.startDateInput.value = '';
@@ -479,11 +536,18 @@
      * @description Sets up all primary event listeners for the application.
     */
     function setupEventListeners() {
-        Object.values(DOM).filter(el => el && el.id && el.id.startsWith('filter-'))
+        Object.values(DOM).filter(el => el && el.id && el.id.startsWith('filter-') && el !== DOM.filterTagsList)
             .forEach(el => {
                 el.addEventListener('input', onFilterChange);
                 el.addEventListener('change', onFilterChange);
             });
+
+        if (DOM.tagModeOrBtn) {
+            DOM.tagModeOrBtn.addEventListener('click', () => setTagMatchMode('OR'));
+        }
+        if (DOM.tagModeAndBtn) {
+            DOM.tagModeAndBtn.addEventListener('click', () => setTagMatchMode('AND'));
+        }
 
         if (DOM.clearFiltersBtn) {
             DOM.clearFiltersBtn.addEventListener('click', clearFilters);
@@ -511,10 +575,14 @@
                 state.allTags.sort();
                 event.target.value = '';
                 renderAllTagsList();
+                populateTagFilter();
+                populateTagAddSelect();
                 const success = await saveAllTagsToServer();
                 if (!success) {
                     state.allTags = state.allTags.filter(t => t !== newTag);
                     renderAllTagsList();
+                    populateTagFilter();
+                    populateTagAddSelect();
                 }
             }
         }
@@ -627,19 +695,28 @@
             removeBtn.onclick = async () => {
                 const prevAllTags = [...state.allTags];
                 const prevTagsData = JSON.parse(JSON.stringify(state.tagsData));
+                const wasSelected = state.selectedTags.has(tag);
 
                 state.allTags = state.allTags.filter(t => t !== tag);
+                state.selectedTags.delete(tag);
                 for (const chatId in state.tagsData) {
                     state.tagsData[chatId] = state.tagsData[chatId].filter(t => t !== tag);
                 }
                 renderAllTagsList();
+                populateTagFilter();
+                populateTagAddSelect();
+                if (wasSelected) onFilterChange();
 
                 const tagsOk = await saveTagsToServer();
                 const allTagsOk = await saveAllTagsToServer();
                 if (!tagsOk || !allTagsOk) {
                     state.allTags = prevAllTags;
                     state.tagsData = prevTagsData;
+                    if (wasSelected) state.selectedTags.add(tag);
                     renderAllTagsList();
+                    populateTagFilter();
+                    populateTagAddSelect();
+                    if (wasSelected) onFilterChange();
                 }
             };
             tagEl.appendChild(removeBtn);
@@ -775,18 +852,43 @@
     }
 
     /**
-     * @description Populates the tag filter dropdown.
+     * @description Populates the tag filter chips in the filter panel.
     */
     function populateTagFilter() {
-        const currentValue = DOM.tagFilterSelect.value;
-        DOM.tagFilterSelect.innerHTML = '<option value="">All Tags</option>';
+        if (!DOM.filterTagsList) return;
+        DOM.filterTagsList.innerHTML = '';
+
+        if (state.allTags.length === 0) {
+            const emptyMsg = document.createElement('span');
+            emptyMsg.className = 'filter-tags-empty';
+            emptyMsg.innerText = 'No tags available';
+            DOM.filterTagsList.appendChild(emptyMsg);
+            return;
+        }
+
         state.allTags.forEach(tag => {
-            const option = document.createElement('option');
-            option.value = tag;
-            option.innerText = tag;
-            DOM.tagFilterSelect.appendChild(option);
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'filter-tag-chip';
+            chip.textContent = tag;
+            chip.dataset.tag = tag;
+            if (state.selectedTags.has(tag)) {
+                chip.classList.add('active');
+            }
+
+            chip.addEventListener('click', () => {
+                if (state.selectedTags.has(tag)) {
+                    state.selectedTags.delete(tag);
+                    chip.classList.remove('active');
+                } else {
+                    state.selectedTags.add(tag);
+                    chip.classList.add('active');
+                }
+                onFilterChange();
+            });
+
+            DOM.filterTagsList.appendChild(chip);
         });
-        DOM.tagFilterSelect.value = currentValue;
     }
 
     /**
