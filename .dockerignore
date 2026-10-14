@@ -9,3 +9,5 @@ chat_data.json
 favorites.json
 tags.json
 all_tags.json
+tests/
+.github/
