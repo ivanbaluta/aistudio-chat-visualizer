@@ -28,7 +28,7 @@ class TestCleanupOrphanedData(unittest.TestCase):
         self.assertEqual(stats["removed_favorites"], 1)
         self.assertEqual(stats["removed_favorite_ids"], ["orphan_fav"])
 
-        with open(self.fav_file, "r", encoding="utf-8") as f:
+        with open(self.fav_file, encoding="utf-8") as f:
             updated = json.load(f)
         self.assertEqual(updated, ["chat1", "chat2"])
 
@@ -46,7 +46,7 @@ class TestCleanupOrphanedData(unittest.TestCase):
         self.assertEqual(stats["removed_tags"], 1)
         self.assertEqual(stats["removed_tag_ids"], ["orphan_chat"])
 
-        with open(self.tags_file, "r", encoding="utf-8") as f:
+        with open(self.tags_file, encoding="utf-8") as f:
             updated = json.load(f)
         self.assertEqual(updated, {
             "chat1": ["tagA"],
@@ -65,9 +65,9 @@ class TestCleanupOrphanedData(unittest.TestCase):
         self.assertEqual(stats["removed_favorites"], 0)
         self.assertEqual(stats["removed_tags"], 0)
 
-        with open(self.fav_file, "r", encoding="utf-8") as f:
+        with open(self.fav_file, encoding="utf-8") as f:
             self.assertEqual(json.load(f), ["chat1"])
-        with open(self.tags_file, "r", encoding="utf-8") as f:
+        with open(self.tags_file, encoding="utf-8") as f:
             self.assertEqual(json.load(f), {"chat1": ["tagA"]})
 
     def test_cleanup_guard_against_empty_chat_map(self):
@@ -80,9 +80,9 @@ class TestCleanupOrphanedData(unittest.TestCase):
         self.assertEqual(stats["removed_favorites"], 0)
         self.assertEqual(stats["removed_tags"], 0)
 
-        with open(self.fav_file, "r", encoding="utf-8") as f:
+        with open(self.fav_file, encoding="utf-8") as f:
             self.assertEqual(json.load(f), ["chat1", "chat2"])
-        with open(self.tags_file, "r", encoding="utf-8") as f:
+        with open(self.tags_file, encoding="utf-8") as f:
             self.assertEqual(json.load(f), {"chat1": ["tagA"]})
 
     def test_cleanup_handles_missing_files(self):
@@ -103,7 +103,7 @@ class TestCleanupOrphanedData(unittest.TestCase):
         stats = cleanup_orphaned_data(chat_map, favorites_file=self.fav_file, tags_file=self.tags_file)
         self.assertEqual(stats["removed_favorites"], 0)
 
-        with open(self.fav_file, "r", encoding="utf-8") as f:
+        with open(self.fav_file, encoding="utf-8") as f:
             self.assertEqual(f.read(), "{invalid json syntax")
 
 

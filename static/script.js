@@ -218,7 +218,7 @@
         }
 
         const rootNode = state.fullChatData.find(chat => chat.parent === null);
-        state.focusNodeId = rootNode ? rootNode.fileId : (state.fullChatData.length > 0 ? state.fullChatData[0].fileId : null);
+        state.focusNodeId = rootNode?.fileId ?? (state.fullChatData[0]?.fileId ?? null);
     }
 
     /**
@@ -298,13 +298,13 @@
      * @returns {Array<object>} A filtered array of chats.
     */
     function applyFilters(filters) {
-        const hasTagFilter = filters.selectedTags && filters.selectedTags.size > 0;
+        const hasTagFilter = Boolean(filters.selectedTags?.size);
         const isAndMode = filters.tagMatchMode === 'AND';
 
         return state.fullChatData.filter(chat => {
             let tagMatch = true;
             if (hasTagFilter) {
-                const chatTags = state.tagsData[chat.fileId] || [];
+                const chatTags = state.tagsData[chat.fileId] ?? [];
                 if (isAndMode) {
                     tagMatch = Array.from(filters.selectedTags).every(t => chatTags.includes(t));
                 } else {
@@ -314,7 +314,7 @@
 
             const searchMatch = !filters.searchText || chat.fileName.toLowerCase().includes(filters.searchText);
             const favoriteMatch = !filters.showFavorites || state.favoriteIds.has(chat.fileId);
-            const branchMatch = !filters.showHasBranches || (chat.parent !== null || chat.children.length > 0);
+            const branchMatch = !filters.showHasBranches || (chat.parent !== null || (chat.children?.length ?? 0) > 0);
             let dateMatch = true;
             if (filters.startDate) dateMatch = new Date(chat.modifiedDate) >= new Date(filters.startDate);
             if (dateMatch && filters.endDate) {
@@ -337,7 +337,7 @@
         const finalNodesIdSet = new Set(filteredChats.map(chat => chat.fileId));
         filteredChats.forEach(chat => {
             let current = chat;
-            while (current && current.parent) {
+            while (current?.parent) {
                 const parentId = current.parent.id.replace('prompts/', '');
                 if (finalNodesIdSet.has(parentId)) break;
                 finalNodesIdSet.add(parentId);
@@ -452,32 +452,30 @@
             const raw = localStorage.getItem(STORAGE_KEY);
             if (!raw) return;
             const filters = JSON.parse(raw);
-            if (typeof filters.searchText === 'string') DOM.searchInput.value = filters.searchText;
+            if (typeof filters?.searchText === 'string') DOM.searchInput.value = filters.searchText;
 
             state.selectedTags.clear();
-            if (Array.isArray(filters.selectedTags)) {
+            if (Array.isArray(filters?.selectedTags)) {
                 filters.selectedTags.forEach(t => {
                     if (typeof t === 'string' && t) state.selectedTags.add(t);
                 });
-            } else if (typeof filters.tag === 'string' && filters.tag) {
+            } else if (typeof filters?.tag === 'string' && filters.tag) {
                 state.selectedTags.add(filters.tag);
             }
 
-            if (filters.tagMatchMode === 'AND' || filters.tagMatchMode === 'OR') {
-                state.tagMatchMode = filters.tagMatchMode;
-            } else {
-                state.tagMatchMode = 'OR';
-            }
+            state.tagMatchMode = (filters?.tagMatchMode === 'AND' || filters?.tagMatchMode === 'OR')
+                ? filters.tagMatchMode
+                : 'OR';
             if (DOM.tagModeOrBtn && DOM.tagModeAndBtn) {
                 DOM.tagModeOrBtn.classList.toggle('active', state.tagMatchMode === 'OR');
                 DOM.tagModeAndBtn.classList.toggle('active', state.tagMatchMode === 'AND');
             }
             populateTagFilter();
 
-            if (typeof filters.showFavorites === 'boolean') DOM.favoritesFilterCheckbox.checked = filters.showFavorites;
-            if (typeof filters.showHasBranches === 'boolean') DOM.branchesFilterCheckbox.checked = filters.showHasBranches;
-            if (typeof filters.startDate === 'string') DOM.startDateInput.value = filters.startDate;
-            if (typeof filters.endDate === 'string') DOM.endDateInput.value = filters.endDate;
+            if (typeof filters?.showFavorites === 'boolean') DOM.favoritesFilterCheckbox.checked = filters.showFavorites;
+            if (typeof filters?.showHasBranches === 'boolean') DOM.branchesFilterCheckbox.checked = filters.showHasBranches;
+            if (typeof filters?.startDate === 'string') DOM.startDateInput.value = filters.startDate;
+            if (typeof filters?.endDate === 'string') DOM.endDateInput.value = filters.endDate;
         } catch (e) {
             console.warn('Could not load filters from localStorage:', e);
         }
@@ -536,7 +534,7 @@
      * @description Sets up all primary event listeners for the application.
     */
     function setupEventListeners() {
-        Object.values(DOM).filter(el => el && el.id && el.id.startsWith('filter-') && el !== DOM.filterTagsList)
+        Object.values(DOM).filter(el => el?.id?.startsWith('filter-') && el !== DOM.filterTagsList)
             .forEach(el => {
                 el.addEventListener('input', onFilterChange);
                 el.addEventListener('change', onFilterChange);
@@ -694,7 +692,7 @@
             removeBtn.innerText = '×';
             removeBtn.onclick = async () => {
                 const prevAllTags = [...state.allTags];
-                const prevTagsData = JSON.parse(JSON.stringify(state.tagsData));
+                const prevTagsData = structuredClone(state.tagsData);
                 const wasSelected = state.selectedTags.has(tag);
 
                 state.allTags = state.allTags.filter(t => t !== tag);
@@ -767,8 +765,8 @@
         DOM.descTitle.appendChild(titleLink);
 
         DOM.descContent.innerText = chatData.description || 'No description provided.';
-        DOM.createdDateEl.innerText = `Created: ${chatData.createdDate.split('T')[0]}`;
-        DOM.modifiedDateEl.innerText = `Modified: ${chatData.modifiedDate.split('T')[0]}`;
+        DOM.createdDateEl.innerText = `Created: ${chatData.createdDate?.split('T')[0] ?? 'Unknown'}`;
+        DOM.modifiedDateEl.innerText = `Modified: ${chatData.modifiedDate?.split('T')[0] ?? 'Unknown'}`;
         updateFavoriteStar(chatData.fileId);
         updateSourceFileLink(chatData);
         renderTagsForChat(chatData.fileId);
@@ -806,7 +804,7 @@
         }
 
         let exclusions = '-type:image -type:document -type:spreadsheet -type:pdf -type:presentation -type:drawing -type:form -type:folder';
-        const branchDepth = (chatData.fileName.match(/Branch of /g) || []).length;
+        const branchDepth = (chatData.fileName.match(/Branch of /g) ?? []).length;
         if (branchDepth === 0) {
             exclusions += ' -"Branch of"';
         } else {

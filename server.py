@@ -28,7 +28,7 @@ def read_json_file(filepath, default_value):
     try:
         if not os.path.exists(filepath):
             return default_value
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, encoding='utf-8') as f:
             return json.load(f)
     except (json.JSONDecodeError, FileNotFoundError):
         return default_value

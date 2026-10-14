@@ -6,10 +6,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
+from collections.abc import Callable
+from typing import Any
+
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
 from googleapiclient.errors import HttpError
-from typing import List, Dict, Any, Optional, Callable
+from googleapiclient.http import MediaIoBaseDownload
 
 # --- Configuration ---
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
@@ -34,7 +36,7 @@ def get_thread_drive_service(creds: Credentials) -> Any:
 
 # --- Core Functions ---
 
-def authenticate(interactive: bool = True) -> Optional[Credentials]:
+def authenticate(interactive: bool = True) -> Credentials | None:
     """
     Handles user authentication via OAuth2.
     Creates or refreshes the token.json file.
@@ -74,7 +76,7 @@ def authenticate(interactive: bool = True) -> Optional[Credentials]:
             token.write(creds.to_json())
     return creds
 
-def find_aistudio_folder_id(service: Any) -> Optional[str]:
+def find_aistudio_folder_id(service: Any) -> str | None:
     """Finds and returns the ID of the Google AI Studio folder."""
     query = f"mimeType='application/vnd.google-apps.folder' and name='{AI_STUDIO_FOLDER_NAME}' and trashed=false"
     response = service.files().list(q=query, spaces="drive", fields="files(id)").execute()
@@ -82,7 +84,7 @@ def find_aistudio_folder_id(service: Any) -> Optional[str]:
         return None
     return response['files'][0]['id']
 
-def fetch_all_files(service: Any, folder_id: str) -> List[Dict[str, Any]]:
+def fetch_all_files(service: Any, folder_id: str) -> list[dict[str, Any]]:
     """Retrieves a list of all prompt files from the specified folder, handling pagination."""
     files = []
     page_token = None
@@ -107,12 +109,12 @@ def fetch_all_files(service: Any, folder_id: str) -> List[Dict[str, Any]]:
     print(f"--- Found {len(files)} total chats in folder. ---")
     return files
 
-def load_existing_cache(filename: str) -> Dict[str, Dict[str, Any]]:
+def load_existing_cache(filename: str) -> dict[str, dict[str, Any]]:
     """Loads previously saved chat data from the local cache file."""
     if not os.path.exists(filename):
         return {}
     try:
-        with open(filename, "r", encoding="utf-8") as f:
+        with open(filename, encoding="utf-8") as f:
             data = json.load(f)
             chats = data.get("chats", [])
             cache = {
@@ -126,7 +128,7 @@ def load_existing_cache(filename: str) -> Dict[str, Dict[str, Any]]:
         print(f"--- Warning: Failed to load cache ({e}). Starting fresh. ---")
         return {}
 
-def download_and_parse_single_file(creds: Credentials, file_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def download_and_parse_single_file(creds: Credentials, file_data: dict[str, Any]) -> dict[str, Any] | None:
     """Downloads content, parses JSON, and extracts chat metadata."""
     file_id = file_data.get("id", "").replace("prompts/", "")
     file_name = file_data.get("name", "Unknown")
@@ -174,10 +176,10 @@ def download_and_parse_single_file(creds: Credentials, file_data: Dict[str, Any]
 
 def process_files(
     creds: Credentials,
-    files: List[Dict[str, Any]],
-    existing_cache: Dict[str, Dict[str, Any]],
-    progress_callback: Optional[Callable[[int, int, str], None]] = None
-) -> List[Dict[str, Any]]:
+    files: list[dict[str, Any]],
+    existing_cache: dict[str, dict[str, Any]],
+    progress_callback: Callable[[int, int, str], None] | None = None
+) -> list[dict[str, Any]]:
     """Processes files incrementally and downloads new or modified chats in parallel."""
     known_non_chat_types = {
         'application/javascript',
@@ -192,8 +194,8 @@ def process_files(
         'application/zip'
     }
 
-    files_to_download: List[Dict[str, Any]] = []
-    chat_map: List[Dict[str, Any]] = []
+    files_to_download: list[dict[str, Any]] = []
+    chat_map: list[dict[str, Any]] = []
     cached_count = 0
 
     for file_data in files:
@@ -248,7 +250,7 @@ def process_files(
     chat_map.sort(key=lambda c: c.get("modifiedDate") or "", reverse=True)
     return chat_map
 
-def sanitize_chat_links(chat_map: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def sanitize_chat_links(chat_map: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     Fixes 'broken' parent links by iterating through the chat map once.
     """
@@ -269,7 +271,7 @@ def sanitize_chat_links(chat_map: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     print(f"--- Check complete. Fixed links: {fixed_links_count}. ---")
     return chat_map
 
-def save_data(folder_id: str, chat_map: List[Dict[str, Any]], filename: str):
+def save_data(folder_id: str, chat_map: list[dict[str, Any]], filename: str):
     """Saves the final data structure to a JSON file."""
     output_data = {"folderId": folder_id, "chats": chat_map}
     temp_filename = f"{filename}.tmp"
@@ -290,10 +292,10 @@ def save_data(folder_id: str, chat_map: List[Dict[str, Any]], filename: str):
         raise
 
 def cleanup_orphaned_data(
-    chat_map: List[Dict[str, Any]],
-    favorites_file: Optional[str] = None,
-    tags_file: Optional[str] = None
-) -> Dict[str, Any]:
+    chat_map: list[dict[str, Any]],
+    favorites_file: str | None = None,
+    tags_file: str | None = None
+) -> dict[str, Any]:
     """
     Removes entries from favorites.json and tags.json that are not present in chat_map.
     Safeguards against empty or invalid chat_map to prevent accidental data loss.
@@ -320,7 +322,7 @@ def cleanup_orphaned_data(
     # Clean favorites.json
     if os.path.exists(fav_path):
         try:
-            with open(fav_path, "r", encoding="utf-8") as f:
+            with open(fav_path, encoding="utf-8") as f:
                 favorites = json.load(f)
             if isinstance(favorites, list):
                 cleaned_favorites = [fid for fid in favorites if fid in valid_ids]
@@ -341,11 +343,11 @@ def cleanup_orphaned_data(
     # Clean tags.json
     if os.path.exists(tags_path):
         try:
-            with open(tags_path, "r", encoding="utf-8") as f:
+            with open(tags_path, encoding="utf-8") as f:
                 tags = json.load(f)
             if isinstance(tags, dict):
                 cleaned_tags = {cid: tlist for cid, tlist in tags.items() if cid in valid_ids}
-                removed_tags = [cid for cid in tags.keys() if cid not in valid_ids]
+                removed_tags = [cid for cid in tags if cid not in valid_ids]
                 if removed_tags:
                     temp_tags = f"{tags_path}.tmp"
                     with open(temp_tags, "w", encoding="utf-8") as f:
@@ -363,7 +365,7 @@ def cleanup_orphaned_data(
 
 # --- Main Execution ---
 
-def main(interactive: bool = True, progress_callback: Optional[Callable[[int, int, str], None]] = None):
+def main(interactive: bool = True, progress_callback: Callable[[int, int, str], None] | None = None):
     """Main function to run the sync script."""
     try:
         creds = authenticate(interactive=interactive)

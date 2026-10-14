@@ -53,7 +53,7 @@ class TestServerEndpoints(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), {"status": "success"})
 
-        with open(self.fav_path, "r", encoding="utf-8") as f:
+        with open(self.fav_path, encoding="utf-8") as f:
             self.assertEqual(json.load(f), ["chat1", "chat2"])
 
     def test_post_favorites_rejects_non_json(self):
@@ -78,7 +78,7 @@ class TestServerEndpoints(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), {"status": "success"})
 
-        with open(self.tags_path, "r", encoding="utf-8") as f:
+        with open(self.tags_path, encoding="utf-8") as f:
             self.assertEqual(json.load(f), {"chat1": ["tagA", "tagB"]})
 
     def test_post_tags_rejects_non_dict(self):
@@ -99,7 +99,7 @@ class TestServerEndpoints(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), {"status": "success"})
 
-        with open(self.all_tags_path, "r", encoding="utf-8") as f:
+        with open(self.all_tags_path, encoding="utf-8") as f:
             self.assertEqual(json.load(f), ["Alpha", "Beta"])
 
     def test_post_all_tags_rejects_non_list(self):
