@@ -41,7 +41,7 @@ jobs:
 
       - name: Check JavaScript syntax
         run: |
-          node --check static/script.js
+          node --check static/script.js static/js/*.js
 
       - name: Run unit and endpoint tests
         run: |
